@@ -1,4 +1,3 @@
-// components/MapView.tsx
 "use client";
 
 import { useState } from "react";
@@ -16,6 +15,7 @@ import { Position } from "../hook/useCurrentPosition";
 interface MapViewProps {
     origen: Position | null;
     destino: Position | null;
+    onMarkerChange: (pos: Position | null) => void;
 }
 
 const userIcon = new Icon({
@@ -30,17 +30,23 @@ const destIcon = new Icon({
     iconAnchor: [12, 41],
 });
 
-function LocationMarker({ onClickMap }: { onClickMap: (p: Position) => void }) {
+function LocationMarker({ clickedPos, onMapClick }: { clickedPos: Position | null, onMapClick: (p: Position | null) => void }) {
     useMapEvents({
         click(e) {
-            const { lat, lng } = e.latlng;
-            onClickMap({ lat, lng });
+            if (clickedPos) {
+                // Si ya hay un punto marcado, se elimina
+                onMapClick(null);
+            } else {
+                // Si no hay punto, se crea uno
+                const { lat, lng } = e.latlng;
+                onMapClick({ lat, lng });
+            }
         },
     });
     return null;
 }
 
-export default function MapView({ origen, destino }: MapViewProps) {
+export default function MapView({ origen, destino, onMarkerChange }: MapViewProps) {
     const [clickedPos, setClickedPos] = useState<Position | null>(null);
 
     if (!origen)
@@ -52,35 +58,42 @@ export default function MapView({ origen, destino }: MapViewProps) {
 
     const center: LatLngExpression = [origen.lat, origen.lng];
 
+    const handleMapClick = (position: Position | null) => {
+        setClickedPos(position);
+        onMarkerChange(position);
+    };
+
     return (
-        <MapContainer
-            center={center}
-            zoom={14}
-            scrollWheelZoom
-            className="h-80 w-full rounded-2xl overflow-hidden shadow border"
-        >
-            <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution="&copy; OpenStreetMap"
-            />
+        <div className="relative">
+            <MapContainer
+                center={center}
+                zoom={14}
+                scrollWheelZoom
+                className="h-80 w-full rounded-2xl overflow-hidden shadow border"
+            >
+                <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution="&copy; OpenStreetMap"
+                />
 
-            <Marker position={[origen.lat, origen.lng]} icon={userIcon}>
-                <Popup>Tu ubicación actual</Popup>
-            </Marker>
-
-            {destino && (
-                <Marker position={[destino.lat, destino.lng]} icon={destIcon}>
-                    <Popup>Destino</Popup>
+                <Marker position={[origen.lat, origen.lng]} icon={userIcon}>
+                    <Popup>Tu ubicación actual</Popup>
                 </Marker>
-            )}
 
-            <LocationMarker onClickMap={setClickedPos} />
+                {destino && (
+                    <Marker position={[destino.lat, destino.lng]} icon={destIcon}>
+                        <Popup>Destino</Popup>
+                    </Marker>
+                )}
 
-            {clickedPos && (
-                <Marker position={[clickedPos.lat, clickedPos.lng]}>
-                    <Popup>Ubicación seleccionada</Popup>
-                </Marker>
-            )}
-        </MapContainer>
+                <LocationMarker clickedPos={clickedPos} onMapClick={handleMapClick} />
+
+                {clickedPos && (
+                    <Marker position={[clickedPos.lat, clickedPos.lng]}>
+                        <Popup>Ubicación seleccionada</Popup>
+                    </Marker>
+                )}
+            </MapContainer>
+        </div>
     );
 }

@@ -1,5 +1,3 @@
-"use client";
-
 import { useNavigate } from "react-router-dom";
 import MapView from "../components/MapView";
 import { useCurrentPosition } from "../hook/useCurrentPosition";
@@ -23,7 +21,13 @@ export default function MainPage() {
 
                 <section className="space-y-1">
                     <h2 className="text-sm font-medium">Tu estás aquí</h2>
-                    <MapView origen={pos} destino={destinoPos} />
+                    
+                    {/* Pasamos la función para manejar cambios */}
+                    <MapView 
+                        origen={pos} 
+                        destino={destinoPos} 
+                        onMarkerChange={setDestinoPos} 
+                    />
                 </section>
 
                 <section className="rounded-2xl border shadow p-4 bg-background/95 backdrop-blur-lg">
