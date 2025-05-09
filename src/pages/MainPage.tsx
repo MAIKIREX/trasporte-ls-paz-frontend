@@ -1,7 +1,11 @@
+import Header from "../components/Header";
 import MapView from "../components/MapView";
 
-function App() {
-  return <MapView />;
-}
+export default function MainPage() {
+  return (
+  <div>
+    <Header  title="CineciaLink"/>
+    <MapView/>;
 
-export default App;
+  </div>)
+}

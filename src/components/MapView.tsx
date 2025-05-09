@@ -1,72 +1,287 @@
-import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Polyline } from 'react-leaflet';
-import simplify from 'simplify-js';
+"use client";
 
-// 🔹 Tus puntos originales (pueden venir de un JSON externo)
-const originalPoints = [
-  [-68.11911607029036, -16.50137896529536],
-  [-68.12100023482365, -16.501477954927196],
-  [-68.1225402597163, -16.50153569885633],
-  [-68.12297903775868, -16.50156044624903],
-  [-68.12296183077645, -16.502715321060975],
-  [-68.12292741681249, -16.5037052082681],
-  [-68.12292996335215, -16.505112902009856],
-  [-68.12288441100927, -16.505786529478456],
-  [-68.12470432319319, -16.507628315624828],
-  [-68.12534116792365, -16.508489536507824],
-  [-68.1262987507206, -16.507745868190895],
-  [-68.12735937176744, -16.50700485025773],
-  [-68.12847134051374, -16.506223368952632],
-  [-68.1296864547291, -16.505373913046697],
-  [-68.13095832001467, -16.50429408017598],
-  [-68.13141141185784, -16.50410432696789],
-  [-68.1328006480791, -16.503731515234037],
-  [-68.13389127269195, -16.50323122717579],
-  [-68.1346771941291, -16.502436504903287],
-  [-68.135163386242, -16.501912098350004],
-  [-68.13573474528, -16.501338656748615],
-  [-68.13637438361917, -16.50191617241684]
-];
+import { useState, useEffect } from "react";
+import {
+    MapContainer,
+    TileLayer,
+    Marker,
+    Popup,
+    useMap,
+    useMapEvents,
+} from "react-leaflet";
+import { LatLngExpression, Icon } from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-const MapView = () => {
-  const [routeCoords, setRouteCoords] = useState([]);
+import { useCurrentPosition } from "../hook/useCurrentPosition";
+import { Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
-  useEffect(() => {
-    // Paso 1: simplificar los puntos con simplify-js
-    const pointsForSimplify = originalPoints.map(([lng, lat]) => ({ x: lng, y: lat }));
+interface Position {
+    lat: number;
+    lng: number;
+}
 
-    const simplified = simplify(pointsForSimplify, 0.0008, true); // ajusta la tolerancia
-    console.log(simplified);
-    // Paso 2: convertir a string para OSRM
-    const coordsStr = simplified.map(p => `${p.x},${p.y}`).join(';');
+/* ---------- Iconos ---------- */
+// azul = origen, rojo = destino (Leaflet-color-markers)
+const userIcon = new Icon({
+    iconUrl:
+        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png",
+    iconRetinaUrl:
+        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
+    shadowUrl:
+        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-shadow.png",
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    shadowSize: [41, 41],
+    shadowAnchor: [12, 41],
+});
 
-    const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
+const destIcon = new Icon({
+    iconUrl:
+        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+    iconRetinaUrl:
+        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+    shadowUrl:
+        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-shadow.png",
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    shadowSize: [41, 41],
+    shadowAnchor: [12, 41],
+});
 
-    fetch(url)
-      .then(res => res.json())
-      .then(data => {
-        if (data.routes && data.routes.length > 0) {
-          const rawCoords = data.routes[0].geometry.coordinates;
-          const formatted = rawCoords.map(([lng, lat]) => [lat, lng]);
-          setRouteCoords(formatted);
+/* ---------- Selector de clic ---------- */
+function LocationSelector({ onSelect }: { onSelect: (p: Position) => void }) {
+    useMapEvents({
+        click(e) {
+            onSelect({ lat: e.latlng.lat, lng: e.latlng.lng });
+        },
+    });
+    return null;
+}
+
+/* ---------- Controlador de cámara ---------- */
+function MapController({ center }: { center: LatLngExpression }) {
+    const map = useMap();
+    useEffect(() => {
+        map.flyTo(center, map.getZoom(), { duration: 0.8 });
+    }, [center, map]);
+    return null;
+}
+
+/* ---------- Componente principal ---------- */
+export default function MapView() {
+    const initialCenter: LatLngExpression = [-16.5, -68.15]; // La Paz
+    const [center, setCenter] = useState<LatLngExpression>(initialCenter);
+
+    /* hook propio que devuelve pos|null y error|null */
+    const { pos, error } = useCurrentPosition();
+
+    /* ORIGEN */
+    const [originOption, setOriginOption] = useState("origen");
+    const [manualOrigin, setManualOrigin] = useState<Position | null>(null);
+
+    /* DESTINO */
+    const [destinationOption, setDestinationOption] = useState("destino");
+    const [manualDestination, setManualDestination] = useState<Position | null>(
+        null
+    );
+
+    /* -------- Handlers -------- */
+    const handleOriginChange = (v: string) => {
+        setOriginOption(v);
+        setManualOrigin(null);
+        if (v === "ubicacion" && pos) setCenter([pos.lat, pos.lng]);
+    };
+
+    const handleDestinationChange = (v: string) => {
+        setDestinationOption(v);
+        setManualDestination(null);
+        if (v === "ubicacion" && pos) setCenter([pos.lat, pos.lng]);
+    };
+
+    const handleManualOrigin = (p: Position) => {
+        setManualOrigin(p);
+        setCenter([p.lat, p.lng]);
+    };
+
+    const handleManualDestination = (p: Position) => {
+        setManualDestination(p);
+        setCenter([p.lat, p.lng]);
+    };
+
+    const handleSearch = () => {
+        const origin = originOption === "ubicacion" ? pos : manualOrigin;
+        const dest =
+            destinationOption === "ubicacion" ? pos : manualDestination;
+
+        if (!origin || !dest) {
+            console.warn("Origen y/o destino faltantes");
+            return;
         }
-      })
-      .catch(err => console.error("Error al consultar OSRM:", err));
-  }, []);
+        console.log("Origen:", origin);
+        console.log("Destino:", dest);
+    };
 
-  const center = [-16.503, -68.125];
+    /* -------- Auto-centrar cuando llegue el GPS -------- */
+    useEffect(() => {
+        if (pos && originOption === "ubicacion" && !manualOrigin) {
+            setCenter([pos.lat, pos.lng]);
+        }
+        if (pos && destinationOption === "ubicacion" && !manualDestination) {
+            setCenter([pos.lat, pos.lng]);
+        }
+    }, [pos, originOption, destinationOption, manualOrigin, manualDestination]);
 
-  return (
-    <MapContainer center={center} zoom={14} style={{ height: '100vh', width: '100%' }}>
-      <TileLayer
-        attribution="&copy; OpenStreetMap contributors"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      {routeCoords.length > 0 && (
-        <Polyline positions={routeCoords} color="green" weight={5} />
-      )}
-    </MapContainer>
-  );
-};
+    /* -------- Flags -------- */
+    const isSearchDisabled =
+        (originOption === "ubicacion" && !pos) ||
+        (originOption === "mapa" && !manualOrigin) ||
+        (destinationOption === "ubicacion" && !pos) ||
+        (destinationOption === "mapa" && !manualDestination);
 
-export default MapView;
+    const showMapHint =
+        (originOption === "mapa" && !manualOrigin) ||
+        (destinationOption === "mapa" && !manualDestination);
+
+    /* -------- Render -------- */
+    return (
+        <div className="w-full h-screen flex flex-col">
+            {/* ----- Barra de controles ----- */}
+            <div className="p-4 flex flex-col md:flex-row gap-4 bg-white shadow-md z-10">
+                {/* Select ORIGEN */}
+                <div className="flex flex-col w-full md:w-auto">
+                    <Select
+                        value={originOption}
+                        onValueChange={handleOriginChange}
+                    >
+                        <SelectTrigger className="w-full md:w-48">
+                            <SelectValue placeholder="Selecciona origen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="origen">Origen</SelectItem>
+                            <SelectItem value="ubicacion">
+                                Ubicación actual
+                            </SelectItem>
+                            <SelectItem value="mapa">
+                                Elegir en el mapa
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Select DESTINO */}
+                <div className="flex flex-col w-full md:w-auto">
+                    <Select
+                        value={destinationOption}
+                        onValueChange={handleDestinationChange}
+                    >
+                        <SelectTrigger className="w-full md:w-48">
+                            <SelectValue placeholder="Selecciona destino" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="destino">Destino</SelectItem>
+                            <SelectItem value="ubicacion">
+                                Ubicación actual
+                            </SelectItem>
+                            <SelectItem value="mapa">
+                                Elegir en el mapa
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Botón BUSCAR */}
+                <Button
+                    onClick={handleSearch}
+                    className="flex items-center gap-2"
+                    disabled={isSearchDisabled}
+                >
+                    <Search className="w-4 h-4" /> Buscar
+                </Button>
+            </div>
+
+            {/* Mensajes informativos */}
+            {showMapHint && (
+                <div className="bg-blue-50 text-blue-700 text-center py-2 text-sm z-10">
+                    Haz clic en el mapa para seleccionar una ubicación.
+                </div>
+            )}
+            {originOption === "ubicacion" && !pos && (
+                <div className="bg-yellow-100 text-yellow-800 text-center py-2 text-sm z-10">
+                    Obteniendo tu ubicación actual...
+                </div>
+            )}
+            {error && (
+                <div className="bg-red-100 text-red-800 text-center py-2 text-sm z-10">
+                    Error obteniendo ubicación: {error}
+                </div>
+            )}
+
+            {/* ----- Mapa ----- */}
+            <div className="flex-1">
+                <MapContainer
+                    center={center}
+                    zoom={14}
+                    scrollWheelZoom
+                    className="h-full w-full z-0"
+                >
+                    {/* Control dinámico de la cámara */}
+                    <MapController center={center} />
+
+                    {/* Capa base OSM */}
+                    <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution="&copy; OpenStreetMap"
+                    />
+
+                    {/* ORIGEN */}
+                    {originOption === "ubicacion" && pos && (
+                        <Marker position={[pos.lat, pos.lng]} icon={userIcon}>
+                            <Popup>Origen: Tu ubicación actual</Popup>
+                        </Marker>
+                    )}
+                    {originOption === "mapa" && !manualOrigin && (
+                        <LocationSelector onSelect={handleManualOrigin} />
+                    )}
+                    {manualOrigin && (
+                        <Marker
+                            position={[manualOrigin.lat, manualOrigin.lng]}
+                            icon={userIcon}
+                        >
+                            <Popup>Origen seleccionado</Popup>
+                        </Marker>
+                    )}
+
+                    {/* DESTINO */}
+                    {destinationOption === "ubicacion" && pos && (
+                        <Marker position={[pos.lat, pos.lng]} icon={destIcon}>
+                            <Popup>Destino: Tu ubicación actual</Popup>
+                        </Marker>
+                    )}
+                    {destinationOption === "mapa" && !manualDestination && (
+                        <LocationSelector onSelect={handleManualDestination} />
+                    )}
+                    {manualDestination && (
+                        <Marker
+                            position={[
+                                manualDestination.lat,
+                                manualDestination.lng,
+                            ]}
+                            icon={destIcon}
+                        >
+                            <Popup>Destino seleccionado</Popup>
+                        </Marker>
+                    )}
+                </MapContainer>
+            </div>
+        </div>
+    );
+}
