@@ -60,7 +60,7 @@ export default function RouteMap({ coordinates, zoom = 15 }: RouteMapProps) {
     }, [coordinates]);
 
     return (
-        <div className="relative w-full h-screen">
+        <div className="relative w-full h-screen rounded-xl overflow-hidden">
             <MapContainer
                 center={center}
                 zoom={zoom}

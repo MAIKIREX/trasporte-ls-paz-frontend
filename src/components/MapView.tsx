@@ -155,9 +155,9 @@ export default function MapView() {
     return (
         <div className="w-full h-screen flex flex-col">
             {/* ----- Barra de controles ----- */}
-            <div className="p-4 flex flex-col md:flex-row gap-4 bg-white shadow-md z-10">
+            <div className="p-4 grid grid-cols-5 md:flex-row gap-2 bg-white shadow-md z-10">
                 {/* Select ORIGEN */}
-                <div className="flex flex-col w-full md:w-auto">
+                <div className="col-span-4 w-full md:w-auto">
                     <Select
                         value={originOption}
                         onValueChange={handleOriginChange}
@@ -178,7 +178,7 @@ export default function MapView() {
                 </div>
 
                 {/* Select DESTINO */}
-                <div className="flex flex-col w-full md:w-auto">
+                <div className="row-start-2 col-span-4 w-full md:w-auto">
                     <Select
                         value={destinationOption}
                         onValueChange={handleDestinationChange}
@@ -201,10 +201,10 @@ export default function MapView() {
                 {/* Botón BUSCAR */}
                 <Button
                     onClick={handleSearch}
-                    className="flex items-center gap-2"
+                    className="col-span-1 items-center gap-2"
                     disabled={isSearchDisabled}
                 >
-                    <Search className="w-4 h-4" /> Buscar
+                    <Search className="w-4 h-4" /> 
                 </Button>
             </div>
 
@@ -226,7 +226,7 @@ export default function MapView() {
             )}
 
             {/* ----- Mapa ----- */}
-            <div className="flex-1">
+            <div className="flex-1 rounded-lg overflow-hidden">
                 <MapContainer
                     center={center}
                     zoom={14}
