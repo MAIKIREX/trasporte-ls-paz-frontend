@@ -1,38 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import Header from "../components/Header";
-import SearchInput from "../components/SearchInput";
-import ActionButton from "../components/ActionButton";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { usePositionStore } from "../stores/usePositionStore";
+import Header from "../components/Header";
 import L from "leaflet";
 
-// Configurar íconos de Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-    iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+    iconRetinaUrl:
+        "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
     iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
     shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-const fallbackPosition = { lat: -16.5, lng: -68.15 }; // La Paz
+const fallbackPosition = { lat: -16.5, lng: -68.15 };
 
 const SearchPage = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [suggestions, setSuggestions] = useState<string[]>([]);
-    const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
+    const [destinationCoords, setDestinationCoords] = useState<{
+        lat: number;
+        lng: number;
+    } | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     const currentPosition = usePositionStore((state) => state.position);
 
-    // Fetch sugerencias filtradas y ordenadas por cercanía en Bolivia
     const fetchSuggestions = async (query: string) => {
         if (!currentPosition || !query) return;
 
         try {
             const response = await fetch(
-                `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lat=${currentPosition.lat}&lon=${currentPosition.lng}&limit=10`
+                `https://photon.komoot.io/api/?q=${encodeURIComponent(
+                    query
+                )}&lat=${currentPosition.lat}&lon=${
+                    currentPosition.lng
+                }&limit=10`
             );
             const data = await response.json();
 
@@ -44,25 +50,27 @@ const SearchPage = () => {
                         const dy = lon - currentPosition.lng;
                         return Math.sqrt(dx * dx + dy * dy);
                     };
-                    return getDistance(a.geometry.coordinates[1], a.geometry.coordinates[0]) -
-                           getDistance(b.geometry.coordinates[1], b.geometry.coordinates[0]);
+                    return (
+                        getDistance(
+                            a.geometry.coordinates[1],
+                            a.geometry.coordinates[0]
+                        ) -
+                        getDistance(
+                            b.geometry.coordinates[1],
+                            b.geometry.coordinates[0]
+                        )
+                    );
                 });
-            const names = filtered.map((f: any) => f.properties.name).filter(Boolean);
+
+            const names = filtered
+                .map((f: any) => f.properties.name)
+                .filter(Boolean);
             setSuggestions(names.slice(0, 5));
         } catch (error) {
             console.error("Error al obtener sugerencias:", error);
         }
     };
 
-    // Debounce de sugerencias
-    useEffect(() => {
-        const delay = setTimeout(() => {
-            if (searchTerm) fetchSuggestions(searchTerm);
-        }, 300);
-        return () => clearTimeout(delay);
-    }, [searchTerm]);
-
-    // Geocodificación con prioridad a cercanía (Nominatim)
     const getCoordinatesFromPlaceName = async (place: string) => {
         if (!currentPosition) return null;
 
@@ -72,11 +80,13 @@ const SearchPage = () => {
             currentPosition.lat + delta,
             currentPosition.lng + delta,
             currentPosition.lat - delta,
-        ].join(',');
+        ].join(",");
 
         try {
             const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}&countrycodes=bo&viewbox=${viewbox}&bounded=1`
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+                    place
+                )}&countrycodes=bo&viewbox=${viewbox}&bounded=1`
             );
             const data = await response.json();
             if (data.length === 0) return null;
@@ -95,7 +105,9 @@ const SearchPage = () => {
         const placeCoords = await getCoordinatesFromPlaceName(searchTerm);
 
         if (!placeCoords) {
-            setErrorMessage("No se encontró el lugar. Intenta con otro nombre.");
+            setErrorMessage(
+                "No se encontró el lugar. Intenta con otro nombre."
+            );
             return;
         }
 
@@ -103,7 +115,9 @@ const SearchPage = () => {
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setSearchTerm(e.target.value);
+        const value = e.target.value;
+        setSearchTerm(value);
+        fetchSuggestions(value);
     };
 
     const handleSuggestionClick = (suggestion: string) => {
@@ -112,24 +126,27 @@ const SearchPage = () => {
     };
 
     return (
-        <div className="space-y-6 pb-16">
+        <div className="space-y-6 pb-16 px-4 max-w-2xl mx-auto">
             <Header title="Ciencia Link" />
 
-            <div className="space-y-4">
-                <p className="text-sm font-medium">Ingresa la zona donde quieres ir</p>
+            <div className="space-y-3">
+                <p className="text-sm font-medium text-muted-foreground">
+                    Ingresa la zona donde quieres ir
+                </p>
 
                 <div className="relative">
-                    <SearchInput
-                        placeholder="Zona sur"
+                    <Input
+                        placeholder="Ej. Zona Sur"
                         value={searchTerm}
                         onChange={handleInputChange}
+                        className="w-full"
                     />
                     {suggestions.length > 0 && (
-                        <ul className="absolute z-10 bg-white shadow border rounded mt-1 w-full max-h-48 overflow-y-auto">
+                        <ul className="absolute z-1000 bg-white shadow-xl border rounded-md mt-1 w-full max-h-48 overflow-y-auto text-sm">
                             {suggestions.map((s, i) => (
                                 <li
                                     key={i}
-                                    className="p-2 hover:bg-gray-100 cursor-pointer"
+                                    className="p-2 hover:bg-primary/10 cursor-pointer transition-colors"
                                     onClick={() => handleSuggestionClick(s)}
                                 >
                                     {s}
@@ -139,14 +156,19 @@ const SearchPage = () => {
                     )}
                 </div>
 
-                <ActionButton label="Buscar" onClick={handleSearch} />
+                <Button onClick={handleSearch} className="w-full sm:w-auto">
+                    Buscar
+                </Button>
 
                 {errorMessage && (
-                    <p className="text-red-600 text-sm">{errorMessage}</p>
+                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded-md text-sm flex items-center gap-2">
+                        <span>⚠️</span>
+                        {errorMessage}
+                    </div>
                 )}
             </div>
 
-            <div className="rounded-2xl overflow-hidden shadow border mt-6 h-[400px]">
+            <div className="rounded-xl overflow-hidden shadow-md border mt-6 h-[400px] sm:h-[500px]">
                 <MapContainer
                     center={currentPosition || fallbackPosition}
                     zoom={14}
