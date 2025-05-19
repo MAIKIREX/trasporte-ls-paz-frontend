@@ -8,7 +8,7 @@ import ActionButton from "../components/ActionButton";
 import { usePositionStore } from "../stores/usePositionStore";
 import L from "leaflet";
 
-// Asegura que los íconos funcionen correctamente en Leaflet
+// Configurar íconos de Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
     iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -16,60 +16,94 @@ L.Icon.Default.mergeOptions({
     shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
+const fallbackPosition = { lat: -16.5, lng: -68.15 }; // La Paz
+
 const SearchPage = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [suggestions, setSuggestions] = useState<string[]>([]);
     const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     const currentPosition = usePositionStore((state) => state.position);
 
-    // Sugerencias usando Photon
+    // Fetch sugerencias filtradas y ordenadas por cercanía en Bolivia
     const fetchSuggestions = async (query: string) => {
         if (!currentPosition || !query) return;
 
-        const response = await fetch(
-            `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lat=${currentPosition.lat}&lon=${currentPosition.lng}`
-        );
-        const data = await response.json();
-        const names = data.features.map((f: any) => f.properties.name).filter(Boolean);
-        setSuggestions(names.slice(0, 5));
+        try {
+            const response = await fetch(
+                `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lat=${currentPosition.lat}&lon=${currentPosition.lng}&limit=10`
+            );
+            const data = await response.json();
+
+            const filtered = data.features
+                .filter((f: any) => f.properties.country === "Bolivia")
+                .sort((a: any, b: any) => {
+                    const getDistance = (lat: number, lon: number) => {
+                        const dx = lat - currentPosition.lat;
+                        const dy = lon - currentPosition.lng;
+                        return Math.sqrt(dx * dx + dy * dy);
+                    };
+                    return getDistance(a.geometry.coordinates[1], a.geometry.coordinates[0]) -
+                           getDistance(b.geometry.coordinates[1], b.geometry.coordinates[0]);
+                });
+            const names = filtered.map((f: any) => f.properties.name).filter(Boolean);
+            setSuggestions(names.slice(0, 5));
+        } catch (error) {
+            console.error("Error al obtener sugerencias:", error);
+        }
     };
 
-    // Obtiene coordenadas del lugar ingresado
+    // Debounce de sugerencias
+    useEffect(() => {
+        const delay = setTimeout(() => {
+            if (searchTerm) fetchSuggestions(searchTerm);
+        }, 300);
+        return () => clearTimeout(delay);
+    }, [searchTerm]);
+
+    // Geocodificación con prioridad a cercanía (Nominatim)
     const getCoordinatesFromPlaceName = async (place: string) => {
-        const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}`
-        );
-        const data = await response.json();
-        if (data.length === 0) return null;
-        return {
-            lat: parseFloat(data[0].lat),
-            lng: parseFloat(data[0].lon),
-        };
+        if (!currentPosition) return null;
+
+        const delta = 0.5;
+        const viewbox = [
+            currentPosition.lng - delta,
+            currentPosition.lat + delta,
+            currentPosition.lng + delta,
+            currentPosition.lat - delta,
+        ].join(',');
+
+        try {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}&countrycodes=bo&viewbox=${viewbox}&bounded=1`
+            );
+            const data = await response.json();
+            if (data.length === 0) return null;
+            return {
+                lat: parseFloat(data[0].lat),
+                lng: parseFloat(data[0].lon),
+            };
+        } catch (error) {
+            console.error("Error al obtener coordenadas:", error);
+            return null;
+        }
     };
 
     const handleSearch = async () => {
+        setErrorMessage(null);
         const placeCoords = await getCoordinatesFromPlaceName(searchTerm);
 
-        if (!currentPosition) {
-            console.warn("Ubicación actual no disponible");
-        }
-
         if (!placeCoords) {
-            console.warn("No se encontraron coordenadas para:", searchTerm);
+            setErrorMessage("No se encontró el lugar. Intenta con otro nombre.");
             return;
         }
 
-        console.log("📍 Ubicación actual:", currentPosition);
-        console.log("📌 Coordenadas del destino:", placeCoords);
-
-        setDestinationCoords(placeCoords); // para mostrar en el mapa
+        setDestinationCoords(placeCoords);
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setSearchTerm(value);
-        fetchSuggestions(value);
+        setSearchTerm(e.target.value);
     };
 
     const handleSuggestionClick = (suggestion: string) => {
@@ -106,29 +140,33 @@ const SearchPage = () => {
                 </div>
 
                 <ActionButton label="Buscar" onClick={handleSearch} />
+
+                {errorMessage && (
+                    <p className="text-red-600 text-sm">{errorMessage}</p>
+                )}
             </div>
 
             <div className="rounded-2xl overflow-hidden shadow border mt-6 h-[400px]">
-                {currentPosition && (
-                    <MapContainer
-                        center={currentPosition}
-                        zoom={14}
-                        style={{ height: "100%", width: "100%" }}
-                    >
-                        <TileLayer
-                            attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
-                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        />
+                <MapContainer
+                    center={currentPosition || fallbackPosition}
+                    zoom={14}
+                    style={{ height: "100%", width: "100%" }}
+                >
+                    <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    {currentPosition && (
                         <Marker position={currentPosition}>
                             <Popup>Tu ubicación actual</Popup>
                         </Marker>
-                        {destinationCoords && (
-                            <Marker position={destinationCoords}>
-                                <Popup>Destino: {searchTerm}</Popup>
-                            </Marker>
-                        )}
-                    </MapContainer>
-                )}
+                    )}
+                    {destinationCoords && (
+                        <Marker position={destinationCoords}>
+                            <Popup>Destino: {searchTerm}</Popup>
+                        </Marker>
+                    )}
+                </MapContainer>
             </div>
         </div>
     );
