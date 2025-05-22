@@ -10,21 +10,23 @@ import L from "leaflet";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-    iconRetinaUrl:
-        "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+    iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
     iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
     shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
 const fallbackPosition = { lat: -16.5, lng: -68.15 };
 
+type Suggestion = {
+    name: string;
+    lat: number;
+    lng: number;
+};
+
 const SearchPage = () => {
     const [searchTerm, setSearchTerm] = useState("");
-    const [suggestions, setSuggestions] = useState<string[]>([]);
-    const [destinationCoords, setDestinationCoords] = useState<{
-        lat: number;
-        lng: number;
-    } | null>(null);
+    const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+    const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     const currentPosition = usePositionStore((state) => state.position);
@@ -34,11 +36,7 @@ const SearchPage = () => {
 
         try {
             const response = await fetch(
-                `https://photon.komoot.io/api/?q=${encodeURIComponent(
-                    query
-                )}&lat=${currentPosition.lat}&lon=${
-                    currentPosition.lng
-                }&limit=10`
+                `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lat=${currentPosition.lat}&lon=${currentPosition.lng}&limit=10`
             );
             const data = await response.json();
 
@@ -51,78 +49,63 @@ const SearchPage = () => {
                         return Math.sqrt(dx * dx + dy * dy);
                     };
                     return (
-                        getDistance(
-                            a.geometry.coordinates[1],
-                            a.geometry.coordinates[0]
-                        ) -
-                        getDistance(
-                            b.geometry.coordinates[1],
-                            b.geometry.coordinates[0]
-                        )
+                        getDistance(a.geometry.coordinates[1], a.geometry.coordinates[0]) -
+                        getDistance(b.geometry.coordinates[1], b.geometry.coordinates[0])
                     );
-                });
+                })
+                .map((f: any) => ({
+                    name: f.properties.name,
+                    lat: f.geometry.coordinates[1],
+                    lng: f.geometry.coordinates[0],
+                }))
+                .filter((s: Suggestion) => s.name);
 
-            const names = filtered
-                .map((f: any) => f.properties.name)
-                .filter(Boolean);
-            setSuggestions(names.slice(0, 5));
+            setSuggestions(filtered.slice(0, 5));
         } catch (error) {
             console.error("Error al obtener sugerencias:", error);
         }
     };
 
-    const getCoordinatesFromPlaceName = async (place: string) => {
-        if (!currentPosition) return null;
+    const handleSearch = async () => {
+        setErrorMessage(null);
 
-        const delta = 0.5;
-        const viewbox = [
-            currentPosition.lng - delta,
-            currentPosition.lat + delta,
-            currentPosition.lng + delta,
-            currentPosition.lat - delta,
-        ].join(",");
+        if (!currentPosition || !searchTerm) return;
 
         try {
             const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-                    place
-                )}&countrycodes=bo&viewbox=${viewbox}&bounded=1`
+                `https://photon.komoot.io/api/?q=${encodeURIComponent(searchTerm)}&lat=${currentPosition.lat}&lon=${currentPosition.lng}&limit=1`
             );
             const data = await response.json();
-            if (data.length === 0) return null;
-            return {
-                lat: parseFloat(data[0].lat),
-                lng: parseFloat(data[0].lon),
-            };
-        } catch (error) {
-            console.error("Error al obtener coordenadas:", error);
-            return null;
+
+            if (!data.features || data.features.length === 0) {
+                setErrorMessage("No se encontró el lugar. Intenta con otro nombre.");
+                return;
+            }
+
+            const place = data.features[0];
+            setDestinationCoords({
+                lat: place.geometry.coordinates[1],
+                lng: place.geometry.coordinates[0],
+            });
+        } catch (err) {
+            console.error("Error al buscar lugar:", err);
+            setErrorMessage("Hubo un problema al buscar el lugar.");
         }
-    };
-
-    const handleSearch = async () => {
-        setErrorMessage(null);
-        const placeCoords = await getCoordinatesFromPlaceName(searchTerm);
-
-        if (!placeCoords) {
-            setErrorMessage(
-                "No se encontró el lugar. Intenta con otro nombre."
-            );
-            return;
-        }
-
-        setDestinationCoords(placeCoords);
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setSearchTerm(value);
+        setErrorMessage(null);
+        setDestinationCoords(null);
         fetchSuggestions(value);
     };
 
-    const handleSuggestionClick = (suggestion: string) => {
-        setSearchTerm(suggestion);
+    const handleSuggestionClick = (suggestion: Suggestion) => {
+        setSearchTerm(suggestion.name);
         setSuggestions([]);
+        setDestinationCoords({ lat: suggestion.lat, lng: suggestion.lng });
+        setErrorMessage(null);
     };
 
     return (
@@ -149,7 +132,7 @@ const SearchPage = () => {
                                     className="p-2 hover:bg-primary/10 cursor-pointer transition-colors"
                                     onClick={() => handleSuggestionClick(s)}
                                 >
-                                    {s}
+                                    {s.name}
                                 </li>
                             ))}
                         </ul>
