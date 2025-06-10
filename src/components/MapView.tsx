@@ -13,9 +13,8 @@ import { LatLngExpression, Icon } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 import { useCurrentPosition } from "../hook/useCurrentPosition";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import {
     Select,
     SelectContent,
@@ -30,14 +29,10 @@ interface Position {
 }
 
 /* ---------- Iconos ---------- */
-// azul = origen, rojo = destino (Leaflet-color-markers)
 const userIcon = new Icon({
-    iconUrl:
-        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png",
-    iconRetinaUrl:
-        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
-    shadowUrl:
-        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-shadow.png",
+    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png",
+    iconRetinaUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
+    shadowUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-shadow.png",
     iconSize: [25, 41],
     iconAnchor: [12, 41],
     shadowSize: [41, 41],
@@ -45,12 +40,9 @@ const userIcon = new Icon({
 });
 
 const destIcon = new Icon({
-    iconUrl:
-        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
-    iconRetinaUrl:
-        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-    shadowUrl:
-        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-shadow.png",
+    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+    iconRetinaUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+    shadowUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-shadow.png",
     iconSize: [25, 41],
     iconAnchor: [12, 41],
     shadowSize: [41, 41],
@@ -81,18 +73,15 @@ export default function MapView() {
     const initialCenter: LatLngExpression = [-16.5, -68.15]; // La Paz
     const [center, setCenter] = useState<LatLngExpression>(initialCenter);
 
-    /* hook propio que devuelve pos|null y error|null */
     const { pos, error } = useCurrentPosition();
 
     /* ORIGEN */
-    const [originOption, setOriginOption] = useState("origen");
+    const [originOption, setOriginOption] = useState<string>("origen");
     const [manualOrigin, setManualOrigin] = useState<Position | null>(null);
 
     /* DESTINO */
-    const [destinationOption, setDestinationOption] = useState("destino");
-    const [manualDestination, setManualDestination] = useState<Position | null>(
-        null
-    );
+    const [destinationOption, setDestinationOption] = useState<string>("destino");
+    const [manualDestination, setManualDestination] = useState<Position | null>(null);
 
     /* -------- Handlers -------- */
     const handleOriginChange = (v: string) => {
@@ -119,8 +108,7 @@ export default function MapView() {
 
     const handleSearch = () => {
         const origin = originOption === "ubicacion" ? pos : manualOrigin;
-        const dest =
-            destinationOption === "ubicacion" ? pos : manualDestination;
+        const dest = destinationOption === "ubicacion" ? pos : manualDestination;
 
         if (!origin || !dest) {
             console.warn("Origen y/o destino faltantes");
@@ -128,6 +116,14 @@ export default function MapView() {
         }
         console.log("Origen:", origin);
         console.log("Destino:", dest);
+    };
+
+    const handleClearAll = () => {
+        setOriginOption("origen");
+        setManualOrigin(null);
+        setDestinationOption("destino");
+        setManualDestination(null);
+        setCenter(initialCenter);
     };
 
     /* -------- Auto-centrar cuando llegue el GPS -------- */
@@ -141,21 +137,23 @@ export default function MapView() {
     }, [pos, originOption, destinationOption, manualOrigin, manualDestination]);
 
     /* -------- Flags -------- */
-    const isSearchDisabled =
-        (originOption === "ubicacion" && !pos) ||
-        (originOption === "mapa" && !manualOrigin) ||
-        (destinationOption === "ubicacion" && !pos) ||
-        (destinationOption === "mapa" && !manualDestination);
-
+    const hasOriginSelected =
+        (originOption === "ubicacion" && !!pos) ||
+        (originOption === "mapa" && !!manualOrigin);
+    const hasDestinationSelected =
+        (destinationOption === "ubicacion" && !!pos) ||
+        (destinationOption === "mapa" && !!manualDestination);
+    const isSearchDisabled = !hasOriginSelected || !hasDestinationSelected;
     const showMapHint =
         (originOption === "mapa" && !manualOrigin) ||
         (destinationOption === "mapa" && !manualDestination);
+    const showClearButton = hasOriginSelected && hasDestinationSelected;
 
     /* -------- Render -------- */
     return (
         <div className="w-full h-screen flex flex-col">
             {/* ----- Barra de controles ----- */}
-            <div className="p-4 grid grid-cols-5 md:flex-row gap-2 bg-white shadow-md z-10">
+            <div className="p-4 grid grid-cols-5 gap-2 bg-white shadow-md z-10">
                 {/* Select ORIGEN */}
                 <div className="col-span-4 w-full md:w-auto">
                     <Select
@@ -167,12 +165,8 @@ export default function MapView() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="origen">Origen</SelectItem>
-                            <SelectItem value="ubicacion">
-                                Ubicación actual
-                            </SelectItem>
-                            <SelectItem value="mapa">
-                                Elegir en el mapa
-                            </SelectItem>
+                            <SelectItem value="ubicacion">Ubicación actual</SelectItem>
+                            <SelectItem value="mapa">Elegir en el mapa</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -188,12 +182,8 @@ export default function MapView() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="destino">Destino</SelectItem>
-                            <SelectItem value="ubicacion">
-                                Ubicación actual
-                            </SelectItem>
-                            <SelectItem value="mapa">
-                                Elegir en el mapa
-                            </SelectItem>
+                            <SelectItem value="ubicacion">Ubicación actual</SelectItem>
+                            <SelectItem value="mapa">Elegir en el mapa</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -201,11 +191,23 @@ export default function MapView() {
                 {/* Botón BUSCAR */}
                 <Button
                     onClick={handleSearch}
-                    className="col-span-1 items-center gap-2"
+                    className="col-span-1 items-center justify-center"
                     disabled={isSearchDisabled}
                 >
-                    <Search className="w-4 h-4" /> 
+                    <Search className="w-4 h-4" />
                 </Button>
+
+                {/* Botón LIMPIAR debajo del BUSCAR */}
+                {showClearButton && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleClearAll}
+                        className="row-start-2 col-span-1 items-center justify-center"
+                    >
+                        <X className="w-4 h-4 text-gray-600" />
+                    </Button>
+                )}
             </div>
 
             {/* Mensajes informativos */}
@@ -233,10 +235,7 @@ export default function MapView() {
                     scrollWheelZoom
                     className="h-full w-full z-0"
                 >
-                    {/* Control dinámico de la cámara */}
                     <MapController center={center} />
-
-                    {/* Capa base OSM */}
                     <TileLayer
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         attribution="&copy; OpenStreetMap"
@@ -252,10 +251,7 @@ export default function MapView() {
                         <LocationSelector onSelect={handleManualOrigin} />
                     )}
                     {manualOrigin && (
-                        <Marker
-                            position={[manualOrigin.lat, manualOrigin.lng]}
-                            icon={userIcon}
-                        >
+                        <Marker position={[manualOrigin.lat, manualOrigin.lng]} icon={userIcon}>
                             <Popup>Origen seleccionado</Popup>
                         </Marker>
                     )}
@@ -270,13 +266,7 @@ export default function MapView() {
                         <LocationSelector onSelect={handleManualDestination} />
                     )}
                     {manualDestination && (
-                        <Marker
-                            position={[
-                                manualDestination.lat,
-                                manualDestination.lng,
-                            ]}
-                            icon={destIcon}
-                        >
+                        <Marker position={[manualDestination.lat, manualDestination.lng]} icon={destIcon}>
                             <Popup>Destino seleccionado</Popup>
                         </Marker>
                     )}
